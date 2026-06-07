@@ -1,0 +1,122 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nokia ABC Testing Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-mark">N</div>
+      <div>
+        <div class="sidebar-title">Nokia Assistant</div>
+        <div class="sidebar-sub">Telecom intelligence</div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <button class="new-chat-btn" onclick="startNewChat()">+ New chat</button>
+    </nav>
+
+    <div class="chat-history-panel">
+      <div class="chat-history-heading">Recents</div>
+      <div class="chat-history-list" id="chat-history-list"></div>
+    </div>
+
+    <button class="theme-btn" id="theme-toggle-btn" onclick="toggleTheme()">Dark Theme</button>
+  </aside>
+
+  <div class="chat-container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-logo">
+      <!-- Nokia wordmark simplified -->
+      <svg viewBox="0 0 52 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <text x="0" y="13" font-family="'IBM Plex Sans',sans-serif" font-weight="700" font-size="13" fill="#124191" letter-spacing="1.2">NOKIA</text>
+      </svg>
+    </div>
+    <div class="header-info">
+      <div class="header-title">ABC Testing Assistant</div>
+      <div class="header-sub">llama-3.2-3b-instruct - localhost:1234</div>
+    </div>
+    <div class="status-badge">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">Ready</span>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages" id="messages">
+    <div class="msg-row bot">
+      <div class="avatar">AI</div>
+      <div class="bubble-wrap">
+        <div class="bubble">
+Hi! I'm your Nokia ABC Testing assistant, powered by <strong>Llama 3.2</strong> running locally via LM Studio.
+
+I can help you with:
+- Choosing between <strong>MT</strong>, <strong>SAF</strong>, and <strong>FAF</strong> testing solutions
+- Calculating UE requirements for multi-site setups
+- Understanding prerequisites and dependencies
+- Generating Logical Design Data templates
+- Material Inventory estimations
+
+What would you like to know?
+        </div>
+        <div class="msg-time" id="welcome-time"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick prompts -->
+  <div class="quick-prompts" id="quick-prompts">
+    <button class="qp-btn" onclick="usePrompt(this)">What is the difference between MT, SAF and FAF?</button>
+    <button class="qp-btn" onclick="usePrompt(this)">How do I choose the right testing solution?</button>
+    <button class="qp-btn" onclick="usePrompt(this)">Calculate UEs for a 5-site 5G standalone setup</button>
+    <button class="qp-btn" onclick="usePrompt(this)">What are FAF prerequisites?</button>
+  </div>
+
+  <!-- Input -->
+  <div class="input-area">
+    <textarea id="user-input" rows="1" placeholder="Ask about testing solutions, UE requirements, configurations..."></textarea>
+    <button class="send-btn" id="send-btn" onclick="sendMessage()" aria-label="Send">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+
+  <!-- Hidden local model config -->
+  <div class="hidden-config">
+    <input type="hidden" id="api-url" value="http://localhost:1234/v1/chat/completions" />
+    <input type="hidden" id="model-name" value="llama-3.2-3b-instruct" />
+  </div>
+
+</div>
+</div>
+</div>
+
+<div class="chat-action-menu" id="chat-action-menu">
+  <button class="chat-action-btn" onclick="requestDeleteChat()">Delete</button>
+</div>
+
+<div class="modal-overlay" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+  <div class="confirm-modal">
+    <div class="confirm-title" id="delete-modal-title">Delete chat?</div>
+    <div class="confirm-copy">
+      This will remove <span class="confirm-chat-title" id="delete-chat-title">this chat</span> from your recents.
+    </div>
+    <div class="confirm-actions">
+      <button class="confirm-btn secondary" onclick="closeDeleteModal()">Cancel</button>
+      <button class="confirm-btn danger" onclick="confirmDeleteChat()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js" defer></script>
+</body>
+</html>
