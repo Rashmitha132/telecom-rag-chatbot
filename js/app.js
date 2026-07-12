@@ -1,4 +1,7 @@
-﻿  const STORAGE_KEY = 'nokia-abc-chat-history';
+﻿const STORAGE_KEY = 'nokia-abc-chat-history';
+  const SESSION_ID = crypto.randomUUID();
+  const BACKEND_URL = 'http://127.0.0.1:8000/chat';
+  const FEEDBACK_URL = 'http://127.0.0.1:8000/feedback';
   let history = [];
   let isLoading = false;
   let savedChats = [];
@@ -181,6 +184,8 @@ What would you like to know?
     history = [...chat.messages];
     const msgs = document.getElementById('messages');
     msgs.innerHTML = '';
+    // Note: message_id isn't persisted in localStorage, so feedback buttons
+    // don't reappear on reopened past chats -- only on fresh replies.
     history.forEach(msg => addMessage(msg.role === 'user' ? 'user' : 'bot', msg.content));
     const qp = document.getElementById('quick-prompts');
     if (qp) qp.style.display = 'none';
@@ -274,7 +279,7 @@ What would you like to know?
     renderChatHistory();
   }
 
-  function addMessage(role, text) {
+  function addMessage(role, text, messageId) {
     const msgs = document.getElementById('messages');
     const row = document.createElement('div');
     row.className = 'msg-row ' + role;
@@ -295,12 +300,98 @@ What would you like to know?
     time.textContent = now();
 
     wrap.appendChild(bubble);
+
+    // Only bot replies that came from a real backend call (have a messageId)
+    // get feedback buttons -- the static welcome message doesn't.
+    if (role === 'bot' && messageId) {
+      const feedbackRow = document.createElement('div');
+      feedbackRow.className = 'feedback-row';
+      feedbackRow.dataset.messageId = messageId;
+      feedbackRow.innerHTML = `
+        <button class="feedback-btn" data-rating="up" onclick="handleFeedbackClick(this)" aria-label="Good response">👍</button>
+        <button class="feedback-btn" data-rating="down" onclick="handleFeedbackClick(this)" aria-label="Bad response">👎</button>
+      `;
+      wrap.appendChild(feedbackRow);
+    }
+
     wrap.appendChild(time);
     row.appendChild(av);
     row.appendChild(wrap);
     msgs.appendChild(row);
     msgs.scrollTop = msgs.scrollHeight;
     return bubble;
+  }
+
+  function handleFeedbackClick(btnEl) {
+    if (btnEl.classList.contains('active')) return; // already selected, no-op
+
+    const row = btnEl.closest('.feedback-row');
+    const messageId = Number(row.dataset.messageId);
+    const rating = btnEl.dataset.rating;
+    const buttons = row.querySelectorAll('.feedback-btn');
+
+    // Allow switching your mind: clear the other button's active state
+    buttons.forEach(b => b.classList.remove('active'));
+    btnEl.classList.add('active');
+
+    // Remove any existing comment box (e.g. switching from down -> up)
+    const existingBox = row.parentElement.querySelector('.feedback-comment-box');
+    if (existingBox) existingBox.remove();
+
+    if (rating === 'down') {
+      // Thumbs down: ask what could be improved before saving anything
+      const box = document.createElement('div');
+      box.className = 'feedback-comment-box';
+      box.innerHTML = `
+        <input type="text" class="feedback-comment-input" placeholder="What could be improved? (optional)" />
+        <button class="feedback-submit-btn" onclick="submitFeedback(${messageId}, 'down', this)">Submit</button>
+      `;
+      row.insertAdjacentElement('afterend', box);
+      box.querySelector('.feedback-comment-input').focus();
+    } else {
+      // Thumbs up: no comment needed, save immediately
+      submitFeedback(messageId, 'up', null);
+    }
+  }
+
+  async function submitFeedback(messageId, rating, submitBtnEl) {
+    let comment = null;
+    let box = null;
+
+    if (submitBtnEl) {
+      box = submitBtnEl.closest('.feedback-comment-box');
+      const input = box.querySelector('.feedback-comment-input');
+      comment = input.value.trim() || null;
+      submitBtnEl.disabled = true;
+      submitBtnEl.textContent = 'Saving...';
+    }
+
+    try {
+      const res = await fetch(FEEDBACK_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message_id: messageId,
+          session_id: SESSION_ID,
+          rating: rating,
+          comment: comment
+        })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      if (box) {
+        box.innerHTML = '<span class="feedback-saved-note">Thanks for the feedback!</span>';
+      }
+
+    } catch (err) {
+      console.error('Feedback failed:', err.message);
+      if (submitBtnEl) {
+        submitBtnEl.disabled = false;
+        submitBtnEl.textContent = 'Submit';
+      }
+    }
   }
 
   function showTyping() {
@@ -361,9 +452,6 @@ What would you like to know?
     const text = input.value.trim();
     if (!text) return;
 
-    const apiUrl = document.getElementById('api-url').value.trim();
-    const modelName = document.getElementById('model-name').value.trim();
-
     input.value = '';
     input.style.height = 'auto';
     document.getElementById('send-btn').disabled = true;
@@ -379,80 +467,24 @@ What would you like to know?
     setStatus('loading');
     showTyping();
 
-    const systemPrompt = `You are an expert assistant for Nokia ABC Testing and Solution offerings. You specialize in:
-- Manual Test (MT): Manual telecom validation processes
-- Sanity Automation Framework (SAF): Lightweight automated sanity checks
-- Full Automation Framework (FAF): End-to-end full automation for large deployments
-
-Help users choose the right solution, calculate UE requirements, explain prerequisites and dependencies, and generate documentation templates. Be concise, technical, and accurate. Prefer short answers unless the user asks for detail.`;
-
     try {
-      const payloadHistory = history.slice(-4); // keep recent turns only for faster local inference
-      const res = await fetch(apiUrl, {
+      const res = await fetch(BACKEND_URL, {
         method: 'POST',
         mode: 'cors',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...payloadHistory
-          ],
-          temperature: 0.4,
-          max_tokens: 512,
-          stream: true
+          message: text,
+          session_id: SESSION_ID
         })
       });
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
+      const data = await res.json();
       removeTyping();
-      const botBubble = addMessage('bot', '');
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let reply = '';
-      let finishReason = null;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith('data:')) continue;
-
-          const chunk = trimmed.slice(5).trim();
-          if (!chunk || chunk === '[DONE]') continue;
-
-          try {
-            const data = JSON.parse(chunk);
-            const choice = data.choices?.[0];
-            const delta = choice?.delta?.content || choice?.message?.content || '';
-            if (choice?.finish_reason) finishReason = choice.finish_reason;
-            if (!delta) continue;
-
-            reply += delta;
-            botBubble.textContent = reply;
-            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-          } catch {
-            // Ignore partial SSE chunks until the next read completes them.
-          }
-        }
-      }
-
-      reply = reply.trim() || 'No response received.';
-      if (finishReason === 'length') {
-        reply += '\n\n[Response stopped because it reached the token limit. Ask me to continue if you need the rest.]';
-        botBubble.textContent = reply;
-      }
+      const reply = data.answer || 'No response received.';
+      addMessage('bot', reply, data.message_id);
 
       history.push({ role: 'assistant', content: reply });
       saveActiveChat();
@@ -460,7 +492,7 @@ Help users choose the right solution, calculate UE requirements, explain prerequ
 
     } catch (err) {
       removeTyping();
-      const errorReply = `Could not reach LM Studio.\n\nMake sure:\n1. LM Studio is open\n2. The local server is started\n3. The model "${modelName}" is loaded\n4. The endpoint URL is correct\n\nError: ${err.message}`;
+      const errorReply = `Could not reach the chatbot backend.\n\nMake sure:\n1. Your FastAPI server is running (uvicorn main:app --reload)\n2. LM Studio is open with its local server started\n3. MySQL is running\n\nError: ${err.message}`;
       history.push({ role: 'assistant', content: errorReply });
       addMessage('bot', errorReply);
       saveActiveChat();
