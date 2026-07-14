@@ -68,7 +68,7 @@ def ask_lm_studio(prompt):
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3,
         },
-        timeout=120,
+        timeout=300,
     )
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
